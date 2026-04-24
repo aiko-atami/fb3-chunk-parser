@@ -1,0 +1,8 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": ["node_modules/**", "dist/**", "coverage/**", "book_*/**", "pdf_*/**"],
+  "semi": false,
+  "singleQuote": true,
+  "sortImports": true,
+  "sortPackageJson": true
+}

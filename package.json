@@ -1,16 +1,20 @@
 {
+  "private": true,
+  "type": "module",
+  "module": "src/index.ts",
   "scripts": {
     "start": "bun src/index.ts",
     "pdf": "bun src/pdf.ts",
-    "lint": "oxlint src",
-    "lint:fix": "oxlint src --fix"
+    "typecheck": "tsgo --noEmit",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix"
   },
-  "module": "src/index.ts",
-  "type": "module",
-  "private": true,
   "devDependencies": {
     "@types/bun": "latest",
-    "oxlint": "^1.61.0",
-    "typescript": "^6.0.0-dev.20260226"
+    "@typescript/native-preview": "^7.0.0-dev.20260421.1",
+    "oxfmt": "^0.46.0",
+    "oxlint": "^1.61.0"
   }
 }
