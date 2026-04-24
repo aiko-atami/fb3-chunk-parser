@@ -1,39 +1,78 @@
-# fb3-pfd-chunk-parser
+# fb3-pdf-chunk-parser
 
-## Configuration
+Small scripts for parsing book content.
 
-Create a `.env` file in the root of the project with the following structure:
+The project supports two modes:
+- FB3 chunks: text chunks, extracts chapters, and writes them as Markdown files.
+- PDF pages: page images and writes a small `metadata.md` file.
+
+## Setup
+
+Install dependencies:
+
+```bash
+bun install
+```
+
+Create `.env` in the project root:
 
 ```env
 BOOK_ID=your_book_id
 VERSION_ID=your_version_id
-BASE_URL=https://www.litres.ru/
+BASE_URL=https://example.com/
 PDF_BOOK_ID=your_pdf_book_id
 ```
 
-To run:
+Create `cookies.txt` in the project root and paste the authenticated Cookie header value into it if needed.
+
+## Download FB3 Text
+
+Run with values from `.env`:
 
 ```bash
-bun run index.ts
+bun run start
 ```
 
-You can override the `.env` FB3 ids for a single run:
+Override `BOOK_ID` and `VERSION_ID` for one run:
 
 ```bash
-bun run start 71106703 110466760
+bun run start :book_id :book_version 
 ```
 
-FB3 output is written to `book_<BOOK_ID>_<title>/`, where title is lowercased and normalized to letters, digits, and `_`.
+Output is written to:
 
-To download PDF pages:
+```text
+book_<BOOK_ID>_<normalized_title>/
+```
+
+Each chapter is saved as a separate Markdown file. The generated `index.md` links to named chapters.
+
+## Download PDF Pages
+
+Run with `PDF_BOOK_ID` from `.env`:
 
 ```bash
 bun run pdf
 ```
 
-PDF output is written to `pdf_<PDF_BOOK_ID>_<title>/` as page images plus `metadata.md`.
-You can override the `.env` PDF id for a single run:
+Override `PDF_BOOK_ID` for one run:
 
 ```bash
-bun run pdf 109041739
+bun run pdf :id 
+```
+
+Output is written to:
+
+```text
+pdf_<PDF_BOOK_ID>_<normalized_title>/
+```
+
+The directory contains downloaded page images and `metadata.md`.
+
+## Development
+
+```bash
+bun run typecheck
+bun run lint
+bun run fmt:check
 ```
