@@ -4,6 +4,7 @@ import {
     delay,
     fetchArrayBuffer,
     fetchText,
+    HttpError,
     loadCookies,
     requireValue,
     saveCookies,
@@ -20,7 +21,7 @@ const BASE_URL = requireValue(process.env.BASE_URL, "BASE_URL");
 const ORIGIN_URL = new URL(BASE_URL).origin;
 const PDF_JS_URL = `${ORIGIN_URL}/pages/get_pdf_js/?file=${encodeURIComponent(PDF_BOOK_ID)}`;
 const DELAY_MS = DEFAULT_DELAY_MS;
-const OUT_DIR = `pdf_${PDF_BOOK_ID}`;
+const PAGE_FORMAT_FALLBACKS = ["jpg", "gif", "png", "webp"];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -116,15 +117,59 @@ function buildMetadata(bookId: string, manifest: PdfManifest, totalPages: number
     return lines.join("\n");
 }
 
-function pageUrl(pageNumber: number, page: PdfPage, renderType: string): string {
+function slugifyPathPart(str: string): string {
+    const withoutUnsafePathChars = Array.from(str.normalize("NFKC"))
+        .filter((char) => char.charCodeAt(0) >= 32 && !'<>:"/\\|?*'.includes(char))
+        .join("");
+
+    const slug = withoutUnsafePathChars
+        .replace(/[^\wа-яА-ЯёЁ. -]/g, "")
+        .trim()
+        .replace(/ +/g, "_")
+        .replace(/_+/g, "_")
+        .slice(0, 80)
+        .replace(/^\.+$/, "");
+
+    return slug || "untitled";
+}
+
+function outputDir(bookId: string, title: string): string {
+    return `pdf_${bookId}_${slugifyPathPart(title)}`;
+}
+
+function pageUrl(pageNumber: number, ext: string, renderType: string): string {
     const params = new URLSearchParams({
         file: PDF_BOOK_ID,
         page: String(pageNumber),
         rt: renderType,
-        ft: page.ext,
+        ft: ext,
     });
 
     return `${ORIGIN_URL}/pages/get_pdf_page/?${params.toString()}`;
+}
+
+function pageExtensionCandidates(page: PdfPage): string[] {
+    return Array.from(new Set([page.ext, ...PAGE_FORMAT_FALLBACKS].filter(Boolean)));
+}
+
+async function existingPageFile(outDir: string, pageNumber: number, extensions: string[]): Promise<string | null> {
+    for (const ext of extensions) {
+        const filename = `${pageNumber}.${ext}`;
+        try {
+            await fs.access(`${outDir}/${filename}`);
+            return filename;
+        } catch (err) {
+            if (!(err instanceof Error && "code" in err && err.code === "ENOENT")) {
+                throw err;
+            }
+        }
+    }
+
+    return null;
+}
+
+function missingPagesLine(pages: number[]): string {
+    return pages.length === 0 ? "" : `- Missing pages: ${pages.join(", ")}\n`;
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -144,30 +189,88 @@ async function run(): Promise<void> {
     }
 
     const title = manifest.Meta?.Title ?? `PDF ${PDF_BOOK_ID}`;
+    const outDir = outputDir(PDF_BOOK_ID, title);
     console.log(`Book: "${title}" — ${group.p.length} pages`);
+    console.log(`Output: ${outDir}/`);
 
-    await fs.mkdir(OUT_DIR, { recursive: true });
+    await fs.mkdir(outDir, { recursive: true });
     await fs.writeFile(
-        `${OUT_DIR}/metadata.md`,
+        `${outDir}/metadata.md`,
         buildMetadata(PDF_BOOK_ID, manifest, group.p.length),
         "utf8",
     );
 
+    const missingPages: number[] = [];
+    let downloadedPages = 0;
+    let existingPages = 0;
+
     for (const [i, page] of group.p.entries()) {
-        const pageNumber = i + 1;
-        const url = pageUrl(pageNumber, page, group.rt);
-        const pageResult = await fetchPdfPage(url, cookies);
+        const pageNumber = i;
+        const extensions = pageExtensionCandidates(page);
+        const progress = `[${i + 1}/${group.p.length}] page=${pageNumber}`;
+
+        const existingFilename = await existingPageFile(outDir, pageNumber, extensions);
+        if (existingFilename) {
+            existingPages++;
+            process.stdout.write(`  ${progress} ${existingFilename} exists\r`);
+            continue;
+        }
+
+        let pageResult: { data: ArrayBuffer; cookies: string } | null = null;
+        let downloadedExt = "";
+        const attemptedExtensions: string[] = [];
+
+        for (const ext of extensions) {
+            attemptedExtensions.push(ext);
+            const url = pageUrl(pageNumber, ext, group.rt);
+
+            try {
+                pageResult = await fetchPdfPage(url, cookies);
+                downloadedExt = ext;
+                break;
+            } catch (err) {
+                if (err instanceof HttpError) {
+                    cookies = err.cookies;
+                    await saveCookies(cookies);
+
+                    if (err.status === 404) {
+                        continue;
+                    }
+                }
+
+                throw err;
+            }
+        }
+
+        if (!pageResult) {
+            missingPages.push(pageNumber);
+            process.stdout.write(`  ${progress} missing (${attemptedExtensions.join(", ")})\r`);
+            if (i < group.p.length - 1) await delay(DELAY_MS);
+            continue;
+        }
+
         cookies = pageResult.cookies;
 
-        await fs.writeFile(`${OUT_DIR}/${pageNumber}.${page.ext}`, Buffer.from(pageResult.data));
+        const filename = `${pageNumber}.${downloadedExt}`;
+        const filepath = `${outDir}/${filename}`;
+        await fs.writeFile(filepath, Buffer.from(pageResult.data));
         await saveCookies(cookies);
+        downloadedPages++;
 
-        process.stdout.write(`  [${pageNumber}/${group.p.length}] ${pageNumber}.${page.ext}\r`);
+        const fallbackNote = downloadedExt === page.ext ? "" : ` (fallback from ${page.ext})`;
+        process.stdout.write(`  ${progress} ${filename}${fallbackNote}\r`);
 
         if (i < group.p.length - 1) await delay(DELAY_MS);
     }
 
-    console.log(`\nDone. ${group.p.length} pages → ${OUT_DIR}/`);
+    if (missingPages.length > 0) {
+        await fs.appendFile(`${outDir}/metadata.md`, missingPagesLine(missingPages), "utf8");
+    }
+
+    const savedPages = existingPages + downloadedPages;
+    const missingSummary =
+        missingPages.length === 0 ? "" : `, ${missingPages.length} missing: ${missingPages.join(", ")}`;
+    console.log(`\nDone. ${savedPages}/${group.p.length} pages → ${outDir}/${missingSummary}`);
 }
 
 run().catch((err) => {

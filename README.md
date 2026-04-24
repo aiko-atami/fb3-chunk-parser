@@ -1,4 +1,4 @@
-# fb3-chunk-parser
+# fb3-pfd-chunk-parser
 
 ## Configuration
 
@@ -23,8 +23,7 @@ To download PDF pages:
 bun run pdf
 ```
 
-PDF output is written to `pdf_<PDF_BOOK_ID>/` as page images plus `metadata.md`.
-
+PDF output is written to `pdf_<PDF_BOOK_ID>_<title>/` as page images plus `metadata.md`.
 You can override the `.env` PDF id for a single run:
 
 ```bash

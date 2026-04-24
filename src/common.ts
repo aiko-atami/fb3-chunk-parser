@@ -3,6 +3,17 @@ import * as fs from "fs/promises";
 export const COOKIES_FILE = "cookies.txt";
 export const DEFAULT_DELAY_MS = 300;
 
+export class HttpError extends Error {
+    constructor(
+        public readonly status: number,
+        public readonly url: string,
+        public readonly cookies: string,
+    ) {
+        super(`HTTP ${status} at ${url}`);
+        this.name = "HttpError";
+    }
+}
+
 export function requireValue(value: string | undefined, name: string): string {
     if (!value) throw new Error(`Environment variable ${name} is not set`);
     return value;
@@ -63,7 +74,7 @@ export async function fetchText(
     const updatedCookies = mergeCookies(cookies, res.headers.getSetCookie());
 
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status} at ${url}`);
+        throw new HttpError(res.status, url, updatedCookies);
     }
 
     return { text: await res.text(), cookies: updatedCookies };
@@ -84,7 +95,7 @@ export async function fetchArrayBuffer(
     const updatedCookies = mergeCookies(cookies, res.headers.getSetCookie());
 
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status} at ${url}`);
+        throw new HttpError(res.status, url, updatedCookies);
     }
 
     return { data: await res.arrayBuffer(), cookies: updatedCookies };
