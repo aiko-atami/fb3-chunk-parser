@@ -1,12 +1,16 @@
 {
   "scripts": {
-    "start": "bun index.ts"
+    "start": "bun src/index.ts",
+    "pdf": "bun src/pdf.ts",
+    "lint": "oxlint src",
+    "lint:fix": "oxlint src --fix"
   },
-  "module": "index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
   "devDependencies": {
     "@types/bun": "latest",
+    "oxlint": "^1.61.0",
     "typescript": "^6.0.0-dev.20260226"
   }
 }
