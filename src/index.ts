@@ -1,111 +1,21 @@
 import * as fs from 'fs/promises';
+import { DEFAULT_DELAY_MS, delay, fetchJsObject, loadCookies, requireValue, saveCookies } from './common.ts';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 // Target book identifiers — provided via .env
-const BOOK_ID = process.env.BOOK_ID;
-const VERSION_ID = process.env.VERSION_ID;
-const BASE_URL = process.env.BASE_URL;
-
-if (!BOOK_ID) throw new Error('Environment variable BOOK_ID is not set');
-if (!VERSION_ID) throw new Error('Environment variable VERSION_ID is not set');
-if (!BASE_URL) throw new Error('Environment variable BASE_URL is not set');
+const BOOK_ID = requireValue(process.env.BOOK_ID, 'BOOK_ID');
+const VERSION_ID = requireValue(process.env.VERSION_ID, 'VERSION_ID');
+const BASE_URL = requireValue(process.env.BASE_URL, 'BASE_URL');
 
 // Construct full endpoint URL dynamically
 const ENDPOINT_URL = `${BASE_URL}${BOOK_ID}/${VERSION_ID}/json/`;
 
 // Delay between chunk requests to avoid rate-limiting (ms).
-const DELAY_MS = 500;
-
-// Cookies are read from and written back to this file (excluded from git).
-const COOKIES_FILE = 'cookies.txt';
+const DELAY_MS = DEFAULT_DELAY_MS;
 
 // Output directory: book_<id>/
 const OUT_DIR = `book_${BOOK_ID}`;
-
-// ─── Cookie I/O ───────────────────────────────────────────────────────────────
-
-/**
- * Reads the cookie string from disk.
- * Fails fast if the file is missing or empty.
- */
-async function loadCookies(): Promise<string> {
-    const raw = await fs.readFile(COOKIES_FILE, 'utf8');
-    const trimmed = raw.trim();
-    if (!trimmed) throw new Error(`${COOKIES_FILE} is empty`);
-    return trimmed;
-}
-
-/**
- * Persists the current cookie string to disk.
- * Called after each request so rotated DDoS-Guard tokens are never lost.
- */
-async function saveCookies(cookies: string): Promise<void> {
-    await fs.writeFile(COOKIES_FILE, cookies, 'utf8');
-}
-
-// ─── Cookie Merging (pure) ────────────────────────────────────────────────────
-
-/**
- * Merges Set-Cookie headers into the current cookie string.
- * The server rotates __ddg* tokens on every response; failing to apply them
- * before the next request results in 403.
- * Pure function — no side effects.
- */
-function mergeCookies(current: string, setCookieHeaders: string[]): string {
-    if (!setCookieHeaders || setCookieHeaders.length === 0) return current;
-
-    const cookieMap = new Map<string, string>();
-    for (const pair of current.split(';')) {
-        const [k, ...v] = pair.trim().split('=');
-        if (k) cookieMap.set(k, v.join('='));
-    }
-
-    for (const header of setCookieHeaders) {
-        const [kv] = header.split(';');
-        if (!kv) continue;
-        const [k, ...v] = kv.trim().split('=');
-        if (k) cookieMap.set(k, v.join('='));
-    }
-
-    return Array.from(cookieMap.entries())
-        .map(([k, v]) => `${k}=${v}`)
-        .join('; ');
-}
-
-// ─── HTTP Fetch ───────────────────────────────────────────────────────────────
-
-/**
- * Fetches a JS-object endpoint and returns parsed data + updated cookies.
- *
- * NOTE: Responses are NOT valid JSON — keys are unquoted JS object literals.
- * We use `new Function('return ...')()` to evaluate the response as a JS expression.
- */
-async function fetchJsObject(url: string, cookies: string): Promise<{ data: unknown; cookies: string }> {
-    const res = await fetch(url, {
-        headers: {
-            'Cookie': cookies,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-    });
-
-    // Always apply rotated tokens before checking status.
-    const updatedCookies = mergeCookies(cookies, res.headers.getSetCookie());
-
-    if (!res.ok) {
-        throw new Error(`HTTP ${res.status} at ${url}`);
-    }
-
-    const text = await res.text();
-    // eslint-disable-next-line no-new-func
-    const data = new Function(`return ${text}`)();
-
-    return { data, cookies: updatedCookies };
-}
-
-// ─── Delay ────────────────────────────────────────────────────────────────────
-
-const delay = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
 
 // ─── Text Extraction ──────────────────────────────────────────────────────────
 
