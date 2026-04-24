@@ -17,6 +17,14 @@ To run:
 bun run index.ts
 ```
 
+You can override the `.env` FB3 ids for a single run:
+
+```bash
+bun run start 71106703 110466760
+```
+
+FB3 output is written to `book_<BOOK_ID>_<title>/`, where title is lowercased and normalized to letters, digits, and `_`.
+
 To download PDF pages:
 
 ```bash

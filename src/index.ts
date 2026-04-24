@@ -11,9 +11,9 @@ import {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-// Target book identifiers — provided via .env
-const BOOK_ID = requireValue(process.env.BOOK_ID, 'BOOK_ID')
-const VERSION_ID = requireValue(process.env.VERSION_ID, 'VERSION_ID')
+// Target book identifiers: CLI arguments override .env for one-off runs.
+const BOOK_ID = requireValue(process.argv[2] ?? process.env.BOOK_ID, 'BOOK_ID')
+const VERSION_ID = requireValue(process.argv[3] ?? process.env.VERSION_ID, 'VERSION_ID')
 const BASE_URL = requireValue(process.env.BASE_URL, 'BASE_URL')
 
 // Construct full endpoint URL dynamically
@@ -21,9 +21,6 @@ const ENDPOINT_URL = `${BASE_URL}${BOOK_ID}/${VERSION_ID}/json/`
 
 // Delay between chunk requests to avoid rate-limiting (ms).
 const DELAY_MS = DEFAULT_DELAY_MS
-
-// Output directory: book_<id>/
-const OUT_DIR = `book_${BOOK_ID}`
 
 // ─── Text Extraction ──────────────────────────────────────────────────────────
 
@@ -152,6 +149,23 @@ function slugify(str: string): string {
     .slice(0, 60)
 }
 
+function slugifyPathPart(str: string): string {
+  const slug = str
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .trim()
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 80)
+
+  return slug || 'untitled'
+}
+
+function outputDir(bookId: string, title: string): string {
+  return `book_${bookId}_${slugifyPathPart(title)}`
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function run(): Promise<void> {
@@ -172,7 +186,9 @@ async function run(): Promise<void> {
   }
 
   const bookTitle = toc.Meta?.Title ?? `Book ${BOOK_ID}`
+  const outDir = outputDir(BOOK_ID, bookTitle)
   console.log(`Book: "${bookTitle}" — ${toc.Parts.length} chunks`)
+  console.log(`Output: ${outDir}/`)
 
   // 3. Stream all chunks and accumulate tokens into chapters.
   //    `current` is the chapter currently being filled; it is flushed to
@@ -207,7 +223,7 @@ async function run(): Promise<void> {
   const valid = chapters.filter((ch) => ch.title || ch.paras.length > 0)
 
   // 4. Write output folder.
-  await fs.mkdir(OUT_DIR, { recursive: true })
+  await fs.mkdir(outDir, { recursive: true })
 
   const indexLines: string[] = [`# ${bookTitle}\n`]
 
@@ -215,7 +231,7 @@ async function run(): Promise<void> {
     const num = String(i + 1).padStart(3, '0')
     const slug = chapter.title ? slugify(chapter.title) : 'nachalo'
     const filename = `${num}_${slug}.md`
-    const filepath = `${OUT_DIR}/${filename}`
+    const filepath = `${outDir}/${filename}`
 
     // Chapter file: heading (if any) + paragraphs separated by single newline.
     let content = ''
@@ -231,9 +247,9 @@ async function run(): Promise<void> {
   }
 
   // 5. Write index.md.
-  await fs.writeFile(`${OUT_DIR}/index.md`, indexLines.join('\n') + '\n', 'utf8')
+  await fs.writeFile(`${outDir}/index.md`, indexLines.join('\n') + '\n', 'utf8')
 
-  console.log(`\nDone. ${valid.length} chapters → ${OUT_DIR}/`)
+  console.log(`\nDone. ${valid.length} chapters → ${outDir}/`)
 }
 
 run().catch((err) => {
