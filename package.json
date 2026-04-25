@@ -5,6 +5,7 @@
   "scripts": {
     "start": "bun src/index.ts",
     "pdf": "bun src/pdf.ts",
+    "audio": "bun src/audio.ts",
     "typecheck": "tsgo --noEmit",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
