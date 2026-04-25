@@ -2,11 +2,12 @@ import * as fs from 'fs/promises'
 
 import {
   DEFAULT_DELAY_MS,
+  authHeaders,
   delay,
-  fetchArrayBuffer,
   fetchText,
   HttpError,
   loadCookies,
+  mergeCookies,
   requireValue,
   saveCookies,
 } from './common.ts'
@@ -220,6 +221,17 @@ function safeFilename(filename: string, fallback: string): string {
   return safe && safe !== '.' && safe !== '..' ? safe : fallback
 }
 
+function formatBytes(bytes: number): string {
+  const units = ['B', 'KiB', 'MiB', 'GiB']
+  let value = bytes
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex++
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
 function formatDuration(seconds: number | null): string {
   if (seconds === null) return ''
   const h = Math.floor(seconds / 3600)
@@ -273,6 +285,61 @@ async function existingFile(filepath: string): Promise<boolean> {
   }
 }
 
+function progressLine(label: string, downloaded: number, total: number | null): string {
+  if (!total || total <= 0) return `  ${label} ${formatBytes(downloaded)}`
+
+  const percent = ((downloaded / total) * 100).toFixed(1)
+  return `  ${label} ${formatBytes(downloaded)} / ${formatBytes(total)} ${percent}%`
+}
+
+async function downloadAudioFile(
+  url: string,
+  filepath: string,
+  cookies: string,
+  headers: HeadersInit,
+  label: string,
+  expectedSize: number | null,
+): Promise<string> {
+  const res = await fetch(url, {
+    headers: {
+      ...authHeaders(cookies),
+      ...headers,
+    },
+  })
+
+  const updatedCookies = mergeCookies(cookies, res.headers.getSetCookie())
+
+  if (!res.ok) {
+    throw new HttpError(res.status, url, updatedCookies)
+  }
+
+  if (!res.body) {
+    throw new Error(`Response body is empty for ${url}`)
+  }
+
+  const contentLength = Number(res.headers.get('content-length') ?? 0)
+  const total = contentLength > 0 ? contentLength : expectedSize
+  const reader = res.body.getReader()
+  const file = await fs.open(filepath, 'w')
+  let downloaded = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      downloaded += value.byteLength
+      await file.write(value)
+      process.stdout.write(`${progressLine(label, downloaded, total)}\r`)
+    }
+  } finally {
+    await file.close()
+  }
+
+  process.stdout.write(`${progressLine(label, downloaded, total)}\n`)
+  return updatedCookies
+}
+
 async function run(): Promise<void> {
   let cookies = await loadCookies()
 
@@ -312,20 +379,20 @@ async function run(): Promise<void> {
 
     if (await existingFile(filepath)) {
       existingFiles++
-      process.stdout.write(`  ${progress} exists\r`)
+      process.stdout.write(`  ${progress} exists\n`)
       continue
     }
 
-    const fileResult = await fetchArrayBuffer(downloadUrl(AUDIO_BOOK_ID, file), cookies, {
-      Accept: file.mime || '*/*',
-    })
-    cookies = fileResult.cookies
-
-    await fs.writeFile(filepath, Buffer.from(fileResult.data))
+    cookies = await downloadAudioFile(
+      downloadUrl(AUDIO_BOOK_ID, file),
+      filepath,
+      cookies,
+      { Accept: file.mime || '*/*' },
+      progress,
+      file.size,
+    )
     await saveCookies(cookies)
     downloadedFiles++
-
-    process.stdout.write(`  ${progress}\r`)
 
     if (i < selectedGroup.files.length - 1) await delay(DELAY_MS)
   }
