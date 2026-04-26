@@ -8,6 +8,7 @@ import {
   HttpError,
   loadCookies,
   mergeCookies,
+  optionalDelayMs,
   requireValue,
   saveCookies,
 } from './common.ts'
@@ -19,7 +20,11 @@ const AUDIO_BOOK_ID = requireValue(
 const REQUESTED_FORMAT = process.argv[3] ?? process.env.AUDIO_FORMAT
 const API_ORIGIN = requireValue(process.env.API_ORIGIN, 'API_ORIGIN')
 const DOWNLOAD_ORIGIN = requireValue(process.env.DOWNLOAD_ORIGIN, 'DOWNLOAD_ORIGIN')
-const DELAY_MS = DEFAULT_DELAY_MS
+const DELAY_MS = optionalDelayMs(
+  process.env.DOWNLOAD_DELAY_MS,
+  DEFAULT_DELAY_MS,
+  'DOWNLOAD_DELAY_MS',
+)
 const DEFAULT_FORMAT_PREFERENCE = ['standard', 'zip', 'mp4'] as const
 const FORMAT_FILE_TYPES = {
   standard: 'standard_quality_mp3',

@@ -26,6 +26,8 @@ PDF_BOOK_ID=your_pdf_book_id
 AUDIO_BOOK_ID=your_audio_book_id
 API_ORIGIN=https://api.example.com
 DOWNLOAD_ORIGIN=https://www.example.com
+# Optional. Delay between downloaded FB3 chunks, PDF pages, and audio files.
+DOWNLOAD_DELAY_MS=500ms
 # Optional. Defaults to standard when available.
 AUDIO_FORMAT=standard
 ```

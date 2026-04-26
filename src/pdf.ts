@@ -7,6 +7,7 @@ import {
   fetchText,
   HttpError,
   loadCookies,
+  optionalDelayMs,
   requireValue,
   saveCookies,
 } from './common.ts'
@@ -21,7 +22,11 @@ const BASE_URL = requireValue(process.env.BASE_URL, 'BASE_URL')
 
 const ORIGIN_URL = new URL(BASE_URL).origin
 const PDF_JS_URL = `${ORIGIN_URL}/pages/get_pdf_js/?file=${encodeURIComponent(PDF_BOOK_ID)}`
-const DELAY_MS = DEFAULT_DELAY_MS
+const DELAY_MS = optionalDelayMs(
+  process.env.DOWNLOAD_DELAY_MS,
+  DEFAULT_DELAY_MS,
+  'DOWNLOAD_DELAY_MS',
+)
 const PAGE_FORMAT_FALLBACKS = ['jpg', 'gif', 'png', 'webp']
 
 // ─── Types ────────────────────────────────────────────────────────────────────

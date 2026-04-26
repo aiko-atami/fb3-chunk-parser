@@ -19,6 +19,17 @@ export function requireValue(value: string | undefined, name: string): string {
   return value
 }
 
+export function optionalDelayMs(value: string | undefined, fallback: number, name: string): number {
+  if (!value) return fallback
+
+  const trimmed = value.trim()
+  const match = /^(\d+)(?:\s*ms)?$/i.exec(trimmed)
+  if (!match)
+    throw new Error(`Environment variable ${name} must be milliseconds, e.g. 500 or 500ms`)
+
+  return Number(match[1])
+}
+
 export async function loadCookies(cookiesFile = COOKIES_FILE): Promise<string> {
   const raw = await fs.readFile(cookiesFile, 'utf8')
   const trimmed = raw.trim()

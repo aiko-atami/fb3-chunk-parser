@@ -5,6 +5,7 @@ import {
   delay,
   fetchJsObject,
   loadCookies,
+  optionalDelayMs,
   requireValue,
   saveCookies,
 } from './common.ts'
@@ -19,8 +20,12 @@ const BASE_URL = requireValue(process.env.BASE_URL, 'BASE_URL')
 // Construct full endpoint URL dynamically
 const ENDPOINT_URL = `${BASE_URL}${BOOK_ID}/${VERSION_ID}/json/`
 
-// Delay between chunk requests to avoid rate-limiting (ms).
-const DELAY_MS = DEFAULT_DELAY_MS
+// Delay between chunk requests to avoid rate-limiting.
+const DELAY_MS = optionalDelayMs(
+  process.env.DOWNLOAD_DELAY_MS,
+  DEFAULT_DELAY_MS,
+  'DOWNLOAD_DELAY_MS',
+)
 
 // ─── Text Extraction ──────────────────────────────────────────────────────────
 
